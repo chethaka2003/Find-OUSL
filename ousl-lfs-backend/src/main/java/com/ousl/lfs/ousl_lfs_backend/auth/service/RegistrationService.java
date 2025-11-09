@@ -71,6 +71,5 @@ public class RegistrationService {
         User u = vt.getUser();
         u.setEnabled(true);
         vt.setUsed(true);
-        // JPA will flush changes automatically
     }
 }

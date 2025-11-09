@@ -4,6 +4,7 @@ spring:
     username: root
     password: Edu@1076
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: update
     show-sql: true
@@ -22,9 +23,9 @@ server:
 ulfs:
   auth:
     allowedDomains:
-      - ou.ac.lk
-      - stu.ou.ac.lk
+      - "ousl.lk"
     verificationLinkBase: http://localhost:8080/api/auth/verify
     tokenTtlMinutes: 60
     rateLimitPerIpPerHour: 20
     minPasswordLength: 8
+

@@ -19,7 +19,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/register", "/api/auth/verify").permitAll()
                         .anyRequest().authenticated()
                 )
-                .httpBasic(Customizer.withDefaults()); // temporary for dev
+                .httpBasic(Customizer.withDefaults());
         return http.build();
     }
 

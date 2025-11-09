@@ -1,10 +1,10 @@
 package com.ousl.lfs.ousl_lfs_backend.common.util;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.ousl.lfs.ousl_lfs_backend.common.config.AuthProperties;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
-import java.util.List;
+
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -12,8 +12,10 @@ import java.util.stream.Collectors;
 public class UniversityDomainChecker {
     private final Set<String> allowed;
 
-    public UniversityDomainChecker(@Value("${ulfs.auth.allowedDomains}") List<String> domains) {
-        this.allowed = domains.stream().map(String::toLowerCase).collect(Collectors.toSet());
+    public UniversityDomainChecker(AuthProperties props) {
+        this.allowed = props.getAllowedDomains().stream()
+                .map(String::toLowerCase)
+                .collect(Collectors.toSet());
     }
 
     public void assertAllowed(String email) {

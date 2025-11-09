@@ -14,7 +14,8 @@ public class MailService {
     private final JavaMailSender mailSender;
 
     @Value("${ulfs.auth.verificationLinkBase}")
-    String linkBase;
+    private String linkBase;
+
 
     public void sendVerificationEmail(String to, String token) {
         String link = linkBase + "?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
@@ -26,7 +27,6 @@ public class MailService {
         try {
             mailSender.send(msg);
         } catch (Exception e) {
-            // For early dev: log only. Later: enqueue for retry.
             System.err.println("Email send failed: " + e.getMessage());
         }
     }
