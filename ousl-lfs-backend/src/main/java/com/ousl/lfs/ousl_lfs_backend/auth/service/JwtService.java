@@ -31,7 +31,10 @@ public class JwtService {
         Instant now = Instant.now();
         Instant exp = now.plus(expMinutes, ChronoUnit.MINUTES);
 
+        String jti = java.util.UUID.randomUUID().toString().replace("-", "");
+
         return Jwts.builder()
+                .id(jti)
                 .subject(email)
                 .claims(Map.of("role", role))
                 .issuedAt(Date.from(now))
@@ -60,4 +63,13 @@ public class JwtService {
             return false;
         }
     }
+
+    public String extractJti(String token) {
+        return parseClaims(token).getId();
+    }
+
+    public Instant extractExpiry(String token) {
+        return parseClaims(token).getExpiration().toInstant();
+    }
+
 }

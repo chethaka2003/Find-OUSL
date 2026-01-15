@@ -6,6 +6,7 @@ import com.ousl.lfs.ousl_lfs_backend.auth.dto.LoginResponse;
 import com.ousl.lfs.ousl_lfs_backend.auth.dto.RegisterRequest;
 import com.ousl.lfs.ousl_lfs_backend.auth.dto.ResetPasswordRequest;
 import com.ousl.lfs.ousl_lfs_backend.auth.service.AuthService;
+import com.ousl.lfs.ousl_lfs_backend.auth.service.LogoutService;
 import com.ousl.lfs.ousl_lfs_backend.auth.service.PasswordResetService;
 import com.ousl.lfs.ousl_lfs_backend.auth.service.RegistrationService;
 import com.ousl.lfs.ousl_lfs_backend.common.util.SimpleRateLimiter;
@@ -28,6 +29,8 @@ public class AuthController {
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
     private final SimpleRateLimiter rateLimiter;
+    private final LogoutService logoutService;
+
 
     // ---------- FR1 ----------
     @PostMapping("/register")
@@ -81,4 +84,15 @@ public class AuthController {
         String h = req.getHeader("X-Forwarded-For");
         return (h != null && !h.isBlank()) ? h.split(",")[0].trim() : req.getRemoteAddr();
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout(@RequestHeader("Authorization") String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Missing Bearer token"));
+        }
+        String token = authHeader.substring(7);
+        logoutService.logout(token);
+        return ResponseEntity.ok(Map.of("message", "Logged out successfully."));
+    }
+
 }
