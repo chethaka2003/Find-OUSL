@@ -28,6 +28,7 @@ ulfs:
     tokenTtlMinutes: 60
     rateLimitPerIpPerHour: 20
     minPasswordLength: 8
+    resetLinkBase: http://localhost:3000/reset-password
   jwt:
     secret: CHANGE_THIS_TO_A_LONG_RANDOM_SECRET_32CHARS_MIN
     expMinutes: 120
