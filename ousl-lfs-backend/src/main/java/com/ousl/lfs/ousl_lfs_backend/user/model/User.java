@@ -1,11 +1,10 @@
 package com.ousl.lfs.ousl_lfs_backend.user.model;
+
 import jakarta.persistence.*;
-import jakarta.persistence.Entity;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
+
 import java.time.Instant;
 
 @Entity
@@ -25,6 +24,11 @@ public class User {
     @Column(nullable=false) private String passwordHash;
     @Column(nullable=false) private String role;
     @Column(nullable=false) private boolean enabled = false;
+
+    @Column(nullable = false)
+    private int failedLoginAttempts = 0;
+
+    private Instant lockedUntil;
 
     @CreationTimestamp
     private Instant createdAt;

@@ -8,6 +8,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import com.ousl.lfs.ousl_lfs_backend.auth.dto.LoginRequest;
+import com.ousl.lfs.ousl_lfs_backend.auth.dto.LoginResponse;
+import com.ousl.lfs.ousl_lfs_backend.auth.service.AuthService;
+
 
 import java.util.Map;
 
@@ -18,6 +22,7 @@ public class AuthController {
 
     private final RegistrationService registrationService;
     private final SimpleRateLimiter rateLimiter;
+    private final AuthService authService;
 
     @PostMapping("/register")
     public ResponseEntity<Map<String, String>> register(@Valid @RequestBody RegisterRequest req,
@@ -38,4 +43,11 @@ public class AuthController {
         String h = req.getHeader("X-Forwarded-For");
         return (h != null && !h.isBlank()) ? h.split(",")[0].trim() : req.getRemoteAddr();
     }
+
+    @PostMapping("/login")
+    public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest req, HttpServletRequest http) {
+        rateLimiter.check("login:" + clientIp(http));
+        return ResponseEntity.ok(authService.login(req));
+    }
+
 }
