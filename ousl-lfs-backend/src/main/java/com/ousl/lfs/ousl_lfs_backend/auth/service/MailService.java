@@ -88,4 +88,33 @@ public class MailService {
         }
     }
 
+    public void sendLostReportConfirmation(
+            String to,
+            String trackingNumber,
+            String category,
+            String description,
+            String location,
+            String lostAt
+    ) {
+        SimpleMailMessage msg = new SimpleMailMessage();
+        msg.setTo(to);
+        msg.setSubject("ULFS Lost Item Report Confirmation - " + trackingNumber);
+        msg.setText(
+                "Hi,\n\nYour lost item report has been submitted.\n\n" +
+                        "Tracking Number: " + trackingNumber + "\n" +
+                        "Category: " + category + "\n" +
+                        "Description: " + description + "\n" +
+                        "Lost Location: " + location + "\n" +
+                        "Approx. Lost Date/Time: " + lostAt + "\n\n" +
+                        "Thank you,\nULFS Team"
+        );
+
+        try {
+            mailSender.send(msg);
+        } catch (Exception e) {
+            System.err.println("Lost report email send failed: " + e.getMessage());
+        }
+    }
+
+
 }
