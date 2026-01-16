@@ -36,36 +36,38 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             FilterChain filterChain
     ) throws ServletException, IOException {
 
-        // 1) Read Authorization header
         String authHeader = request.getHeader("Authorization");
 
-        // If no token, continue (Spring Security will reject protected endpoints)
+        // No token -> continue (protected endpoints will be rejected later)
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // 2) Extract token
         String token = authHeader.substring(7);
 
-        // 3) Validate JWT signature + expiration
+        // Invalid / expired token -> continue (Spring will reject protected endpoints)
         if (!jwtService.isValid(token)) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // 4) Extract JTI (token unique id) and block if revoked
+        // FR4: block revoked token (logout)
         String jti = jwtService.extractJti(token);
         if (jti != null && revokedTokenRepository.existsById(jti)) {
-            // Token is revoked -> treat as not authenticated
             filterChain.doFilter(request, response);
             return;
         }
 
-        // 5) Extract email (subject)
         String email = jwtService.extractEmail(token);
 
-        // 6) Load user details and set authentication into SecurityContext
+        // If email missing OR already authenticated -> do nothing
+        if (email == null || SecurityContextHolder.getContext().getAuthentication() != null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // Load user + set authentication
         var userDetails = userDetailsService.loadUserByUsername(email);
 
         var authentication = new UsernamePasswordAuthenticationToken(
@@ -77,7 +79,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
-        // 7) Continue request
         filterChain.doFilter(request, response);
     }
 }

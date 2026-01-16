@@ -88,11 +88,11 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<Map<String, String>> logout(@RequestHeader("Authorization") String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            return ResponseEntity.badRequest().body(Map.of("message", "Missing Bearer token"));
+            return ResponseEntity.badRequest().body(Map.of(MSG, "Missing Bearer token"));
         }
         String token = authHeader.substring(7);
         logoutService.logout(token);
-        return ResponseEntity.ok(Map.of("message", "Logged out successfully."));
+        return ResponseEntity.ok(Map.of(MSG, "Logged out successfully."));
     }
 
 }
