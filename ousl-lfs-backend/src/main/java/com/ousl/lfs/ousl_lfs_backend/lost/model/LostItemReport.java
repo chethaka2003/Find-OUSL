@@ -43,4 +43,17 @@ public class LostItemReport {
 
     @CreationTimestamp
     private Instant createdAt;
+
+    @Column(length = 255)
+    private String serialNumberOrMarkings;
+
+    @Column(length = 2000)
+    private String distinguishingFeatures;
+
+    @Column
+    private Double estimatedValue;
+
+    @Column
+    private Double rewardAmount;
+
 }

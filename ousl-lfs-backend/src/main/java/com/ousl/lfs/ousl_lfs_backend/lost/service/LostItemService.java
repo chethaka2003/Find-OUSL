@@ -13,6 +13,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemUpdateResponse;
+import com.ousl.lfs.ousl_lfs_backend.lost.model.LostItemAuditLog;
+import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemAuditLogRepository;
+import java.time.Duration;
+import org.springframework.transaction.annotation.Transactional;
+
+
+
 
 import java.io.InputStream;
 import java.nio.file.*;
@@ -29,6 +37,8 @@ public class LostItemService {
     private final LostItemPhotoRepository photoRepo;
     private final UserRepository userRepo;
     private final MailService mailService;
+    private final LostItemAuditLogRepository auditRepo;
+
 
     @Value("${ulfs.lost.uploadDir:uploads/lost-items}")
     private String uploadDir;
@@ -164,4 +174,140 @@ public class LostItemService {
         if (contentType.equalsIgnoreCase("image/webp")) return ".webp";
         return "";
     }
+
+    @Transactional
+    public LostItemUpdateResponse updateLostItemDetails(
+            Long reportId,
+            String userEmail,
+            String serialNumberOrMarkings,
+            String distinguishingFeatures,
+            Double estimatedValue,
+            Double rewardAmount,
+            List<MultipartFile> newPhotos
+    ) {
+        // ✅ Fetch report WITH user (avoids LazyInitializationException)
+        LostItemReport report = reportRepo.findWithUserById(reportId)
+                .orElseThrow(() -> new IllegalArgumentException("Lost report not found"));
+
+        // ✅ Permission check (only owner can edit)
+        String ownerEmail = report.getUser().getEmail(); // now safe
+        if (!ownerEmail.equalsIgnoreCase(userEmail)) {
+            throw new SecurityException("You are not allowed to edit this report");
+        }
+
+        // ✅ 24 hour edit window check
+        if (report.getCreatedAt() == null ||
+                Duration.between(report.getCreatedAt(), Instant.now()).toHours() > 24) {
+            throw new IllegalStateException("Edit window has passed (24 hours)");
+        }
+
+        // ✅ Validate numeric fields
+        if (estimatedValue != null && estimatedValue < 0) {
+            throw new IllegalArgumentException("Estimated value must be positive");
+        }
+        if (rewardAmount != null && rewardAmount < 0) {
+            throw new IllegalArgumentException("Reward amount must be positive");
+        }
+
+        StringBuilder changes = new StringBuilder();
+
+        // ✅ Update fields only if provided
+        if (serialNumberOrMarkings != null && !serialNumberOrMarkings.isBlank()) {
+            report.setSerialNumberOrMarkings(serialNumberOrMarkings.trim());
+            changes.append("serialNumberOrMarkings updated; ");
+        }
+
+        if (distinguishingFeatures != null && !distinguishingFeatures.isBlank()) {
+            report.setDistinguishingFeatures(distinguishingFeatures.trim());
+            changes.append("distinguishingFeatures updated; ");
+        }
+
+        if (estimatedValue != null) {
+            report.setEstimatedValue(estimatedValue);
+            changes.append("estimatedValue updated; ");
+        }
+
+        if (rewardAmount != null) {
+            report.setRewardAmount(rewardAmount);
+            changes.append("rewardAmount updated; ");
+        }
+
+        // ✅ Save updated report
+        reportRepo.save(report);
+
+        // ✅ Optional: save extra photos
+        List<MultipartFile> safePhotos = (newPhotos == null) ? List.of() : newPhotos;
+        List<String> savedPaths = new ArrayList<>();
+
+        if (!safePhotos.isEmpty()) {
+            if (safePhotos.size() > 3) {
+                throw new IllegalArgumentException("You can upload up to 3 photos at a time");
+            }
+
+            Path base = Paths.get(uploadDir).toAbsolutePath().normalize();
+            try {
+                Files.createDirectories(base.resolve(report.getTrackingNumber()));
+            } catch (Exception e) {
+                throw new IllegalStateException("Failed to create upload directory", e);
+            }
+
+            for (MultipartFile f : safePhotos) {
+                if (f == null || f.isEmpty()) continue;
+
+                if (f.getSize() > 5L * 1024 * 1024) {
+                    throw new IllegalArgumentException("Each photo must be <= 5MB");
+                }
+
+                String ct = f.getContentType();
+                if (ct == null || !(ct.equalsIgnoreCase("image/jpeg")
+                        || ct.equalsIgnoreCase("image/png")
+                        || ct.equalsIgnoreCase("image/webp"))) {
+                    throw new IllegalArgumentException("Only JPG/PNG/WEBP images are allowed");
+                }
+
+                String ext = guessExt(f.getOriginalFilename(), f.getContentType());
+                String fileName = UUID.randomUUID() + ext;
+                Path target = base.resolve(report.getTrackingNumber()).resolve(fileName).normalize();
+
+                try (InputStream in = f.getInputStream()) {
+                    Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+                } catch (Exception e) {
+                    throw new IllegalStateException("Failed to save photo: " + f.getOriginalFilename(), e);
+                }
+
+                LostItemPhoto p = new LostItemPhoto();
+                p.setReport(report);
+                p.setOriginalName(Optional.ofNullable(f.getOriginalFilename()).orElse("photo"));
+                p.setFilePath(target.toString());
+                photoRepo.save(p);
+
+                savedPaths.add(target.toString());
+            }
+
+            if (!savedPaths.isEmpty()) {
+                changes.append("addedPhotos=").append(savedPaths.size()).append("; ");
+            }
+        }
+
+        // ✅ Audit log (FR6 requirement)
+        LostItemAuditLog log = new LostItemAuditLog();
+        log.setReport(report);
+        log.setAction("UPDATE_DETAILS");
+        log.setUserEmail(userEmail);
+        log.setDetails(changes.toString());
+        auditRepo.save(log);
+
+        return new LostItemUpdateResponse(
+                report.getId(),
+                report.getTrackingNumber(),
+                report.getSerialNumberOrMarkings(),
+                report.getDistinguishingFeatures(),
+                report.getEstimatedValue(),
+                report.getRewardAmount(),
+                savedPaths,
+                "Lost item details updated successfully."
+        );
+    }
+
+
 }
