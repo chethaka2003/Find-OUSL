@@ -19,13 +19,19 @@ import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemAuditLogRepository;
 import java.time.Duration;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemListItemResponse;
+import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemSpecs;
+import org.springframework.data.domain.*;
+import org.springframework.data.jpa.domain.Specification;
 
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.util.List;
 
 
 import java.io.InputStream;
 import java.nio.file.*;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -38,6 +44,7 @@ public class LostItemService {
     private final UserRepository userRepo;
     private final MailService mailService;
     private final LostItemAuditLogRepository auditRepo;
+    private final LostItemReportRepository lostItemReportRepository;
 
 
     @Value("${ulfs.lost.uploadDir:uploads/lost-items}")
@@ -307,6 +314,54 @@ public class LostItemService {
                 savedPaths,
                 "Lost item details updated successfully."
         );
+    }
+
+
+    /**
+     * FR7: Search + filtering + pagination
+     */
+    @Transactional(readOnly = true)
+    public Page<LostItemListItemResponse> searchLostItems(
+            ItemCategory category,
+            String q,
+            OffsetDateTime from,
+            OffsetDateTime to,
+            Pageable pageable
+    ) {
+        // Spring Data JPA 3.5+: avoid deprecated Specification.where(...)
+        Specification<LostItemReport> spec = Specification.allOf(
+                LostItemSpecs.categoryIs(category),
+                LostItemSpecs.keywordLike(q),
+                LostItemSpecs.lostAtFrom(from),
+                LostItemSpecs.lostAtTo(to)
+        );
+
+        return lostItemReportRepository.findAll(spec, pageable)
+                .map(r -> new LostItemListItemResponse(
+                        r.getId(),
+                        r.getTrackingNumber(),
+                        r.getCategory(),
+                        r.getDescription(),
+                        r.getLostLocation(),
+                        toOffset(r.getLostAt()),
+                        extractPhotoPaths(r)
+                ));
+
+    }
+
+    private OffsetDateTime toOffset(Instant instant) {
+        if (instant == null) return null;
+        // Use Sri Lanka time (or use ZoneOffset.UTC if you prefer)
+        return instant.atZone(ZoneId.of("Asia/Colombo")).toOffsetDateTime();
+    }
+
+    private List<String> extractPhotoPaths(LostItemReport r) {
+        // If your report stores photos in a separate entity (LostItemPhoto)
+        if (r.getPhotos() == null) return List.of();
+
+        return r.getPhotos().stream()
+                .map(LostItemPhoto::getFilePath) // <-- if field name is different, change here
+                .toList();
     }
 
 

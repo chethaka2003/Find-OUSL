@@ -7,6 +7,7 @@ import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.Instant;
+import java.util.List;
 
 @Entity
 @Table(name = "lost_item_reports", indexes = {
@@ -55,5 +56,8 @@ public class LostItemReport {
 
     @Column
     private Double rewardAmount;
+
+    @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<LostItemPhoto> photos;
 
 }
