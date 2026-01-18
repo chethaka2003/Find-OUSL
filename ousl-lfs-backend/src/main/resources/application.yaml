@@ -42,4 +42,8 @@ ulfs:
   lost:
     uploadDir: uploads/lost-items
 
+app:
+  uploads:
+    dir: uploads
+
 
