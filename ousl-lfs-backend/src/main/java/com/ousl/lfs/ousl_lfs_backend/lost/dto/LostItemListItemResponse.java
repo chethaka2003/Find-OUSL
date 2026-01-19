@@ -2,7 +2,7 @@ package com.ousl.lfs.ousl_lfs_backend.lost.dto;
 
 import com.ousl.lfs.ousl_lfs_backend.lost.model.ItemCategory;
 
-import java.time.OffsetDateTime;
+import java.time.Instant;
 import java.util.List;
 
 public record LostItemListItemResponse(
@@ -11,7 +11,6 @@ public record LostItemListItemResponse(
         ItemCategory category,
         String description,
         String lostLocation,
-        OffsetDateTime lostAt,
+        Instant lostAt,
         List<String> photoPaths
 ) {}
-

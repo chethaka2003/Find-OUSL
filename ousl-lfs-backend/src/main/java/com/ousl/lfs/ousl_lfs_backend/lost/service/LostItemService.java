@@ -337,15 +337,16 @@ public class LostItemService {
         );
 
         return lostItemReportRepository.findAll(spec, pageable)
-                .map(r -> new LostItemListItemResponse(
+                .map(r -> new com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemListItemResponse(
                         r.getId(),
                         r.getTrackingNumber(),
                         r.getCategory(),
                         r.getDescription(),
                         r.getLostLocation(),
-                        toOffset(r.getLostAt()),
+                        r.getLostAt(),
                         extractPhotoPaths(r)
                 ));
+
 
     }
 
@@ -355,14 +356,13 @@ public class LostItemService {
         return instant.atZone(ZoneId.of("Asia/Colombo")).toOffsetDateTime();
     }
 
-    private List<String> extractPhotoPaths(LostItemReport r) {
-        // If your report stores photos in a separate entity (LostItemPhoto)
-        if (r.getPhotos() == null) return List.of();
-
+    private java.util.List<String> extractPhotoPaths(com.ousl.lfs.ousl_lfs_backend.lost.model.LostItemReport r) {
+        if (r.getPhotos() == null) return java.util.List.of();
         return r.getPhotos().stream()
-                .map(LostItemPhoto::getFilePath) // <-- if field name is different, change here
+                .map(p -> p.getFilePath())
                 .toList();
     }
+
 
 
 }
