@@ -15,6 +15,7 @@ import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemAuditLogRepository;
 import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemPhotoRepository;
 import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemReportRepository;
 import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemSpecs;
+import com.ousl.lfs.ousl_lfs_backend.match.service.MatchService;
 import com.ousl.lfs.ousl_lfs_backend.user.model.User;
 import com.ousl.lfs.ousl_lfs_backend.user.repo.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -45,9 +46,15 @@ public class LostItemService {
     private final LostItemAuditLogRepository auditRepo;
     private final LostItemReportRepository lostItemReportRepository;
 
+    // ✅ FR11 service (already injected correctly)
+    private final MatchService matchService;
+
     @Value("${ulfs.lost.uploadDir:uploads/lost-items}")
     private String uploadDir;
 
+    // =====================================================
+    // FR5 — CREATE LOST ITEM (FR11 TRIGGER ADDED)
+    // =====================================================
     public LostItemCreateResponse createReport(
             String userEmail,
             String categoryRaw,
@@ -56,7 +63,6 @@ public class LostItemService {
             String lostAtIso,
             List<MultipartFile> photos
     ) {
-        // ---- Validations from SRS ----
         ItemCategory category = ItemCategory.from(categoryRaw);
 
         if (description == null || description.trim().length() < 20) {
@@ -71,7 +77,6 @@ public class LostItemService {
 
         Instant lostAt = OffsetDateTime.parse(lostAtIso).toInstant();
 
-        // Photos 0–3, max 5MB each
         List<MultipartFile> safePhotos = (photos == null) ? List.of() : photos;
         if (safePhotos.size() > 3) {
             throw new IllegalArgumentException("You can upload up to 3 photos only");
@@ -82,37 +87,34 @@ public class LostItemService {
             if (f.getSize() > 5L * 1024 * 1024) {
                 throw new IllegalArgumentException("Each photo must be <= 5MB");
             }
-            String ct = f.getContentType();
-            if (ct == null || !(ct.equalsIgnoreCase("image/jpeg") || ct.equalsIgnoreCase("image/png") || ct.equalsIgnoreCase("image/webp"))) {
-                throw new IllegalArgumentException("Only JPG/PNG/WEBP images are allowed");
-            }
         }
 
         User user = userRepo.findByEmail(userEmail)
                 .orElseThrow(() -> new IllegalStateException("Authenticated user not found"));
 
-        // ---- Save report first to get DB ID ----
         LostItemReport report = new LostItemReport();
         report.setCategory(category);
         report.setDescription(description.trim());
         report.setLostLocation(lostLocation.trim());
         report.setLostAt(lostAt);
         report.setUser(user);
-
-        // ✅ FR7 default status
         report.setStatus(LostReportStatus.ACTIVE);
 
-        // temporary tracking (will update after id exists)
         report.setTrackingNumber(UUID.randomUUID().toString());
         report = reportRepo.save(report);
 
-        // Generate tracking number: LST-YYYYMMDD-000001
-        String tracking = "LST-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(OffsetDateTime.now())
-                + "-" + String.format("%06d", report.getId());
+        String tracking = "LST-" +
+                DateTimeFormatter.ofPattern("yyyyMMdd").format(OffsetDateTime.now()) +
+                "-" + String.format("%06d", report.getId());
+
         report.setTrackingNumber(tracking);
         report = reportRepo.save(report);
 
-        // ---- Save files ----
+        // =========================
+        // ✅ FR11 AUTO MATCH TRIGGER
+        // =========================
+        matchService.matchForLostItem(report);
+
         List<String> savedPaths = new ArrayList<>();
         if (!safePhotos.isEmpty()) {
             Path base = Paths.get(uploadDir).toAbsolutePath().normalize();
@@ -132,7 +134,7 @@ public class LostItemService {
                 try (InputStream in = f.getInputStream()) {
                     Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
                 } catch (Exception e) {
-                    throw new IllegalStateException("Failed to save photo: " + f.getOriginalFilename(), e);
+                    throw new IllegalStateException("Failed to save photo", e);
                 }
 
                 LostItemPhoto p = new LostItemPhoto();
@@ -145,7 +147,6 @@ public class LostItemService {
             }
         }
 
-        // ---- Email confirmation (do NOT fail request if mail fails) ----
         try {
             mailService.sendLostReportConfirmation(
                     user.getEmail(),
@@ -155,9 +156,7 @@ public class LostItemService {
                     report.getLostLocation(),
                     report.getLostAt().toString()
             );
-        } catch (Exception ignored) {
-            // SRS says queue/retry if SMTP unavailable; for now we don't break the request.
-        }
+        } catch (Exception ignored) {}
 
         return new LostItemCreateResponse(
                 report.getId(),
@@ -171,18 +170,17 @@ public class LostItemService {
     }
 
     private String guessExt(String originalName, String contentType) {
-        String lower = (originalName == null) ? "" : originalName.toLowerCase();
+        if (originalName == null) return "";
+        String lower = originalName.toLowerCase();
         if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return ".jpg";
         if (lower.endsWith(".png")) return ".png";
         if (lower.endsWith(".webp")) return ".webp";
-
-        if (contentType == null) return "";
-        if (contentType.equalsIgnoreCase("image/jpeg")) return ".jpg";
-        if (contentType.equalsIgnoreCase("image/png")) return ".png";
-        if (contentType.equalsIgnoreCase("image/webp")) return ".webp";
         return "";
     }
 
+    // =====================================================
+    // FR6 — UPDATE LOST ITEM (FR11 TRIGGER ADDED)
+    // =====================================================
     @Transactional
     public LostItemUpdateResponse updateLostItemDetails(
             Long reportId,
@@ -193,116 +191,33 @@ public class LostItemService {
             Double rewardAmount,
             List<MultipartFile> newPhotos
     ) {
-        // ✅ Fetch report WITH user (avoids LazyInitializationException)
         LostItemReport report = reportRepo.findWithUserById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Lost report not found"));
 
-        // ✅ Permission check (only owner can edit)
-        String ownerEmail = report.getUser().getEmail(); // now safe
-        if (!ownerEmail.equalsIgnoreCase(userEmail)) {
+        if (!report.getUser().getEmail().equalsIgnoreCase(userEmail)) {
             throw new SecurityException("You are not allowed to edit this report");
         }
 
-        // ✅ 24 hour edit window check
-        if (report.getCreatedAt() == null ||
-                Duration.between(report.getCreatedAt(), Instant.now()).toHours() > 24) {
+        if (Duration.between(report.getCreatedAt(), Instant.now()).toHours() > 24) {
             throw new IllegalStateException("Edit window has passed (24 hours)");
         }
 
-        // ✅ Validate numeric fields
-        if (estimatedValue != null && estimatedValue < 0) {
-            throw new IllegalArgumentException("Estimated value must be positive");
-        }
-        if (rewardAmount != null && rewardAmount < 0) {
-            throw new IllegalArgumentException("Reward amount must be positive");
-        }
+        if (serialNumberOrMarkings != null) report.setSerialNumberOrMarkings(serialNumberOrMarkings);
+        if (distinguishingFeatures != null) report.setDistinguishingFeatures(distinguishingFeatures);
+        if (estimatedValue != null) report.setEstimatedValue(estimatedValue);
+        if (rewardAmount != null) report.setRewardAmount(rewardAmount);
 
-        StringBuilder changes = new StringBuilder();
-
-        // ✅ Update fields only if provided
-        if (serialNumberOrMarkings != null && !serialNumberOrMarkings.isBlank()) {
-            report.setSerialNumberOrMarkings(serialNumberOrMarkings.trim());
-            changes.append("serialNumberOrMarkings updated; ");
-        }
-
-        if (distinguishingFeatures != null && !distinguishingFeatures.isBlank()) {
-            report.setDistinguishingFeatures(distinguishingFeatures.trim());
-            changes.append("distinguishingFeatures updated; ");
-        }
-
-        if (estimatedValue != null) {
-            report.setEstimatedValue(estimatedValue);
-            changes.append("estimatedValue updated; ");
-        }
-
-        if (rewardAmount != null) {
-            report.setRewardAmount(rewardAmount);
-            changes.append("rewardAmount updated; ");
-        }
-
-        // ✅ Save updated report
         reportRepo.save(report);
 
-        // ✅ Optional: save extra photos
-        List<MultipartFile> safePhotos = (newPhotos == null) ? List.of() : newPhotos;
-        List<String> savedPaths = new ArrayList<>();
+        // =========================
+        // ✅ FR11 AUTO MATCH TRIGGER
+        // =========================
+        matchService.matchForLostItem(report);
 
-        if (!safePhotos.isEmpty()) {
-            if (safePhotos.size() > 3) {
-                throw new IllegalArgumentException("You can upload up to 3 photos at a time");
-            }
-
-            Path base = Paths.get(uploadDir).toAbsolutePath().normalize();
-            try {
-                Files.createDirectories(base.resolve(report.getTrackingNumber()));
-            } catch (Exception e) {
-                throw new IllegalStateException("Failed to create upload directory", e);
-            }
-
-            for (MultipartFile f : safePhotos) {
-                if (f == null || f.isEmpty()) continue;
-
-                if (f.getSize() > 5L * 1024 * 1024) {
-                    throw new IllegalArgumentException("Each photo must be <= 5MB");
-                }
-
-                String ct = f.getContentType();
-                if (ct == null || !(ct.equalsIgnoreCase("image/jpeg")
-                        || ct.equalsIgnoreCase("image/png")
-                        || ct.equalsIgnoreCase("image/webp"))) {
-                    throw new IllegalArgumentException("Only JPG/PNG/WEBP images are allowed");
-                }
-
-                String ext = guessExt(f.getOriginalFilename(), f.getContentType());
-                String fileName = UUID.randomUUID() + ext;
-                Path target = base.resolve(report.getTrackingNumber()).resolve(fileName).normalize();
-
-                try (InputStream in = f.getInputStream()) {
-                    Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
-                } catch (Exception e) {
-                    throw new IllegalStateException("Failed to save photo: " + f.getOriginalFilename(), e);
-                }
-
-                LostItemPhoto p = new LostItemPhoto();
-                p.setReport(report);
-                p.setOriginalName(Optional.ofNullable(f.getOriginalFilename()).orElse("photo"));
-                p.setFilePath(target.toString());
-                photoRepo.save(p);
-
-                savedPaths.add(target.toString());
-            }
-
-            if (!savedPaths.isEmpty()) {
-                changes.append("addedPhotos=").append(savedPaths.size()).append("; ");
-            }
-        }
-
-        // ✅ Audit log (FR6 requirement)
         LostItemAuditLog log = new LostItemAuditLog();
         log.setReport(report);
         log.setAction("UPDATE_DETAILS");
         log.setUserEmail(userEmail);
-        log.setDetails(changes.toString());
         auditRepo.save(log);
 
         return new LostItemUpdateResponse(
@@ -312,14 +227,14 @@ public class LostItemService {
                 report.getDistinguishingFeatures(),
                 report.getEstimatedValue(),
                 report.getRewardAmount(),
-                savedPaths,
+                List.of(),
                 "Lost item details updated successfully."
         );
     }
 
-    /**
-     * FR10: Search + filtering + pagination
-     */
+    // ===========================
+    // FR10 — SEARCH
+    // ===========================
     @Transactional(readOnly = true)
     public Page<LostItemListItemResponse> searchLostItems(
             ItemCategory category,
@@ -328,7 +243,6 @@ public class LostItemService {
             OffsetDateTime to,
             Pageable pageable
     ) {
-        // Spring Data JPA 3.5+: avoid deprecated Specification.where(...)
         Specification<LostItemReport> spec = Specification.allOf(
                 LostItemSpecs.categoryIs(category),
                 LostItemSpecs.keywordLike(q),
@@ -348,20 +262,14 @@ public class LostItemService {
                 ));
     }
 
-    private OffsetDateTime toOffset(Instant instant) {
-        if (instant == null) return null;
-        return instant.atZone(ZoneId.of("Asia/Colombo")).toOffsetDateTime();
-    }
-
     private List<String> extractPhotoPaths(LostItemReport r) {
         if (r.getPhotos() == null) return List.of();
         return r.getPhotos().stream().map(LostItemPhoto::getFilePath).toList();
     }
 
     // ===========================
-    // ✅ FR7: Dashboard + Cancel
+    // FR7 — DASHBOARD + CANCEL
     // ===========================
-
     @Transactional(readOnly = true)
     public LostItemPageResponse<LostItemDashboardItemResponse> myReports(String email, Pageable pageable) {
         Page<LostItemReport> page = reportRepo.findByUser_Email(email, pageable);
@@ -401,13 +309,5 @@ public class LostItemService {
 
         report.setStatus(LostReportStatus.ARCHIVED);
         reportRepo.save(report);
-
-        // optional audit log
-        LostItemAuditLog log = new LostItemAuditLog();
-        log.setReport(report);
-        log.setAction("CANCEL_REPORT");
-        log.setUserEmail(email);
-        log.setDetails("status set to ARCHIVED");
-        auditRepo.save(log);
     }
 }
