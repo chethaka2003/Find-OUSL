@@ -46,6 +46,21 @@ public class FoundItemReport {
     @Column(nullable = true, length = 255)
     private String serialNumberOrMarkings;
 
+    // ✅ FR9 fields (NEW)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = true, length = 20)
+    private PossessionStatus possessionStatus; // SELF / OFFICE
+
+    @Column(nullable = true, length = 255)
+    private String holdingLocationDetails;
+
+    @Column(nullable = true, length = 255)
+    private String availabilityTimes;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = true, length = 20)
+    private PreferredContactMethod preferredContactMethod; // EMAIL / PHONE / WHATSAPP
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false,
             foreignKey = @ForeignKey(name = "fk_found_report_user"))

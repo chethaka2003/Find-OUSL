@@ -2,36 +2,35 @@ package com.ousl.lfs.ousl_lfs_backend.lost.service;
 
 import com.ousl.lfs.ousl_lfs_backend.auth.service.MailService;
 import com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemCreateResponse;
+import com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemDashboardItemResponse;
+import com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemListItemResponse;
+import com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemPageResponse;
+import com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemUpdateResponse;
 import com.ousl.lfs.ousl_lfs_backend.lost.model.ItemCategory;
+import com.ousl.lfs.ousl_lfs_backend.lost.model.LostItemAuditLog;
 import com.ousl.lfs.ousl_lfs_backend.lost.model.LostItemPhoto;
 import com.ousl.lfs.ousl_lfs_backend.lost.model.LostItemReport;
+import com.ousl.lfs.ousl_lfs_backend.lost.model.LostReportStatus;
+import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemAuditLogRepository;
 import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemPhotoRepository;
 import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemReportRepository;
+import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemSpecs;
 import com.ousl.lfs.ousl_lfs_backend.user.model.User;
 import com.ousl.lfs.ousl_lfs_backend.user.repo.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-import com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemUpdateResponse;
-import com.ousl.lfs.ousl_lfs_backend.lost.model.LostItemAuditLog;
-import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemAuditLogRepository;
-import java.time.Duration;
-import org.springframework.transaction.annotation.Transactional;
-
-import com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemListItemResponse;
-import com.ousl.lfs.ousl_lfs_backend.lost.repo.LostItemSpecs;
 import org.springframework.data.domain.*;
 import org.springframework.data.jpa.domain.Specification;
-
-import java.time.OffsetDateTime;
-import java.time.ZoneId;
-import java.util.List;
-
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.nio.file.*;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -45,7 +44,6 @@ public class LostItemService {
     private final MailService mailService;
     private final LostItemAuditLogRepository auditRepo;
     private final LostItemReportRepository lostItemReportRepository;
-
 
     @Value("${ulfs.lost.uploadDir:uploads/lost-items}")
     private String uploadDir;
@@ -100,6 +98,9 @@ public class LostItemService {
         report.setLostLocation(lostLocation.trim());
         report.setLostAt(lostAt);
         report.setUser(user);
+
+        // ✅ FR7 default status
+        report.setStatus(LostReportStatus.ACTIVE);
 
         // temporary tracking (will update after id exists)
         report.setTrackingNumber(UUID.randomUUID().toString());
@@ -316,9 +317,8 @@ public class LostItemService {
         );
     }
 
-
     /**
-     * FR7: Search + filtering + pagination
+     * FR10: Search + filtering + pagination
      */
     @Transactional(readOnly = true)
     public Page<LostItemListItemResponse> searchLostItems(
@@ -337,7 +337,7 @@ public class LostItemService {
         );
 
         return lostItemReportRepository.findAll(spec, pageable)
-                .map(r -> new com.ousl.lfs.ousl_lfs_backend.lost.dto.LostItemListItemResponse(
+                .map(r -> new LostItemListItemResponse(
                         r.getId(),
                         r.getTrackingNumber(),
                         r.getCategory(),
@@ -346,23 +346,68 @@ public class LostItemService {
                         r.getLostAt(),
                         extractPhotoPaths(r)
                 ));
-
-
     }
 
     private OffsetDateTime toOffset(Instant instant) {
         if (instant == null) return null;
-        // Use Sri Lanka time (or use ZoneOffset.UTC if you prefer)
         return instant.atZone(ZoneId.of("Asia/Colombo")).toOffsetDateTime();
     }
 
-    private java.util.List<String> extractPhotoPaths(com.ousl.lfs.ousl_lfs_backend.lost.model.LostItemReport r) {
-        if (r.getPhotos() == null) return java.util.List.of();
-        return r.getPhotos().stream()
-                .map(p -> p.getFilePath())
-                .toList();
+    private List<String> extractPhotoPaths(LostItemReport r) {
+        if (r.getPhotos() == null) return List.of();
+        return r.getPhotos().stream().map(LostItemPhoto::getFilePath).toList();
     }
 
+    // ===========================
+    // ✅ FR7: Dashboard + Cancel
+    // ===========================
 
+    @Transactional(readOnly = true)
+    public LostItemPageResponse<LostItemDashboardItemResponse> myReports(String email, Pageable pageable) {
+        Page<LostItemReport> page = reportRepo.findByUser_Email(email, pageable);
 
+        List<LostItemDashboardItemResponse> content = page.getContent().stream()
+                .map(r -> new LostItemDashboardItemResponse(
+                        r.getId(),
+                        r.getTrackingNumber(),
+                        r.getCategory(),
+                        r.getDescription(),
+                        r.getLostLocation(),
+                        r.getLostAt(),
+                        r.getStatus(),
+                        r.getCreatedAt(),
+                        extractPhotoPaths(r)
+                ))
+                .toList();
+
+        return new LostItemPageResponse<>(
+                content,
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages(),
+                page.isLast()
+        );
+    }
+
+    @Transactional
+    public void cancelMyReport(String email, Long reportId) {
+        LostItemReport report = reportRepo.findWithUserById(reportId)
+                .orElseThrow(() -> new IllegalArgumentException("Lost report not found"));
+
+        if (!report.getUser().getEmail().equalsIgnoreCase(email)) {
+            throw new SecurityException("You are not allowed to cancel this report");
+        }
+
+        report.setStatus(LostReportStatus.ARCHIVED);
+        reportRepo.save(report);
+
+        // optional audit log
+        LostItemAuditLog log = new LostItemAuditLog();
+        log.setReport(report);
+        log.setAction("CANCEL_REPORT");
+        log.setUserEmail(email);
+        log.setDetails("status set to ARCHIVED");
+        auditRepo.save(log);
+    }
 }

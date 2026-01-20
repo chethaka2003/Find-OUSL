@@ -38,6 +38,11 @@ public class LostItemReport {
     @Column(nullable = false)
     private Instant lostAt;
 
+    // ✅ FR7 status (NEW)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 32)
+    private LostReportStatus status = LostReportStatus.ACTIVE;
+
     @ManyToOne(optional = false, fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
@@ -59,5 +64,4 @@ public class LostItemReport {
 
     @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<LostItemPhoto> photos;
-
 }

@@ -6,42 +6,56 @@ import org.springframework.data.jpa.domain.Specification;
 
 import java.time.OffsetDateTime;
 
-public final class LostItemSpecs {
+public class LostItemSpecs {
 
-    private LostItemSpecs() {}
-
-    public static Specification<LostItemReport> categoryIs(ItemCategory category) {
-        return (root, query, cb) -> {
-            if (category == null) return cb.conjunction();
-            return cb.equal(root.get("category"), category);
-        };
-    }
-
+    /**
+     * Keyword search across trackingNumber, description, lostLocation.
+     * (Your entity does NOT have itemName, so we use trackingNumber instead.)
+     */
     public static Specification<LostItemReport> keywordLike(String q) {
-        return (root, query, cb) -> {
-            if (q == null || q.isBlank()) return cb.conjunction();
-            String like = "%" + q.trim().toLowerCase() + "%";
+        if (q == null || q.isBlank()) {
+            return (root, query, cb) -> cb.conjunction();
+        }
+        String qq = q.toLowerCase();
 
-            // search in description, lostLocation, trackingNumber (you can add more)
-            return cb.or(
-                    cb.like(cb.lower(root.get("description")), like),
-                    cb.like(cb.lower(root.get("lostLocation")), like),
-                    cb.like(cb.lower(root.get("trackingNumber")), like)
-            );
-        };
+        return (root, query, cb) -> cb.or(
+                cb.like(cb.lower(root.get("trackingNumber")), "%" + qq + "%"),
+                cb.like(cb.lower(root.get("description")), "%" + qq + "%"),
+                cb.like(cb.lower(root.get("lostLocation")), "%" + qq + "%")
+        );
     }
 
+    /** Explicit location filter (FR10) */
+    public static Specification<LostItemReport> locationLike(String location) {
+        if (location == null || location.isBlank()) {
+            return (root, query, cb) -> cb.conjunction();
+        }
+        String loc = location.toLowerCase();
+        return (root, query, cb) ->
+                cb.like(cb.lower(root.get("lostLocation")), "%" + loc + "%");
+    }
+
+    /** Category filter (FR10) */
+    public static Specification<LostItemReport> categoryIs(ItemCategory category) {
+        if (category == null) {
+            return (root, query, cb) -> cb.conjunction();
+        }
+        return (root, query, cb) -> cb.equal(root.get("category"), category);
+    }
+
+    /** From date filter (FR10) */
     public static Specification<LostItemReport> lostAtFrom(OffsetDateTime from) {
-        return (root, query, cb) -> {
-            if (from == null) return cb.conjunction();
-            return cb.greaterThanOrEqualTo(root.get("lostAt"), from);
-        };
+        if (from == null) {
+            return (root, query, cb) -> cb.conjunction();
+        }
+        return (root, query, cb) -> cb.greaterThanOrEqualTo(root.get("lostAt"), from.toInstant());
     }
 
+    /** To date filter (FR10) */
     public static Specification<LostItemReport> lostAtTo(OffsetDateTime to) {
-        return (root, query, cb) -> {
-            if (to == null) return cb.conjunction();
-            return cb.lessThanOrEqualTo(root.get("lostAt"), to);
-        };
+        if (to == null) {
+            return (root, query, cb) -> cb.conjunction();
+        }
+        return (root, query, cb) -> cb.lessThanOrEqualTo(root.get("lostAt"), to.toInstant());
     }
 }
