@@ -1,14 +1,21 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
-import Home from './pages/Home';
-import Login from './pages/Login';
-import Signup from './pages/Signup';
+
+// Public Pages
+import Home from './pages/public/Home';
+
+// Auth Pages
+import Login from './pages/auth/Login';
+import Signup from './pages/auth/Signup';
+import ForgotPassword from './pages/auth/ForgotPassword';
+import ResetPassword from './pages/auth/ResetPassword';
+
+// Item Pages
+import ReportLostItem from './pages/items/ReportLostItem';
+import ReportFoundItem from './pages/items/ReportFoundItem';
 
 /**
  * Main App Component
- * Sets up routing for the entire application
- * Routes without navbar: Login, Signup
- * Routes with navbar: Home, and all other pages
  */
 function App() {
   return (
@@ -18,20 +25,24 @@ function App() {
           {/* Authentication Routes - No Navbar */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           
           {/* Main Application Routes - With Navbar */}
           <Route
             path="/*"
             element={
               <>
-                {/* Navbar appears on all routes except login/signup */}
+                {/* Navbar appears on all routes except login/signup/password-recovery */}
                 <Navbar />
                 <Routes>
                   {/* Home Page */}
                   <Route path="/" element={<Home />} />
                   
-                  {/* TODO: Add more routes */}
-                  {/* <Route path="/report-lost" element={<ReportLostItem />} /> */}
+                  {/* Item Management Routes */}
+                  <Route path="/report-lost" element={<ReportLostItem />} />
+                  <Route path="/report-found" element={<ReportFoundItem />} />
+
                   
                 </Routes>
               </>
