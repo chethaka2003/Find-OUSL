@@ -35,13 +35,17 @@ const Navbar = () => {
           <Link to="/report-lost" className="text-gray-700 hover:text-primary transition">
             Report Lost Item
           </Link>
-          <Link to="/submit-found" className="text-gray-700 hover:text-primary transition">
-            Submit Found Item
+          <Link to="/report-found" className="text-gray-700 hover:text-primary transition">
+            Report Found Item
           </Link>
 
           {/* Notification Bell - Only visible when logged in */}
           {isLoggedIn && (
-            <button className="relative hover:opacity-80 transition">
+            <button 
+              onClick={() => navigate('/notifications')}
+              className="relative hover:opacity-80 transition"
+              aria-label="Notifications"
+            >
               <Bell className="w-6 h-6 text-gray-700" />
               {/* Notification badge */}
               <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
@@ -61,7 +65,6 @@ const Navbar = () => {
               <User className="w-6 h-6" />
             </button>
           ) : (
-
             // Show login and signup buttons when not logged in
             <div className="flex items-center gap-3">
               <button
