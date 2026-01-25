@@ -23,22 +23,18 @@ public class SecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 
         http
-                // ✅ Postman + REST APIs -> disable CSRF
                 .csrf(csrf -> csrf.disable())
-
-                // ✅ No session, JWT only
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-                // ✅ Allow login/register/verify without token
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers(
-                                "/api/auth/**",     // ✅ easiest: allow everything under /api/auth
-                                "/error"
-                        ).permitAll()
+                        // Public
+                        .requestMatchers("/api/auth/**", "/error").permitAll()
+
+                        // Admin-only area (future FR16-FR19). Safe even if you have no controllers yet.
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+                        // Everything else requires login (same as your current behavior)
                         .anyRequest().authenticated()
                 )
-
-                // ✅ JWT filter
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

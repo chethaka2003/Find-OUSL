@@ -1,14 +1,12 @@
 package com.ousl.lfs.ousl_lfs_backend.match.controller;
 
-import com.ousl.lfs.ousl_lfs_backend.match.dto.MatchResultResponse;
+import com.ousl.lfs.ousl_lfs_backend.match.model.MatchResult;
 import com.ousl.lfs.ousl_lfs_backend.match.service.MatchService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/matches")
@@ -17,25 +15,23 @@ public class MatchController {
 
     private final MatchService matchService;
 
-    // Suggest FOUND items for a given LOST report
     @GetMapping("/lost/{lostId}")
-    public ResponseEntity<List<MatchResultResponse>> matchFoundForLost(
+    public ResponseEntity<Page<MatchResult>> matchFoundForLost(
             @PathVariable Long lostId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
+            Pageable pageable
     ) {
-        Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(matchService.matchFoundForLost(lostId, pageable));
+        return ResponseEntity.ok(
+                matchService.matchFoundForLost(lostId, pageable)
+        );
     }
 
-    // Suggest LOST reports for a given FOUND item
     @GetMapping("/found/{foundId}")
-    public ResponseEntity<List<MatchResultResponse>> matchLostForFound(
+    public ResponseEntity<Page<MatchResult>> matchLostForFound(
             @PathVariable Long foundId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size
+            Pageable pageable
     ) {
-        Pageable pageable = PageRequest.of(page, size);
-        return ResponseEntity.ok(matchService.matchLostForFound(foundId, pageable));
+        return ResponseEntity.ok(
+                matchService.matchLostForFound(foundId, pageable)
+        );
     }
 }
