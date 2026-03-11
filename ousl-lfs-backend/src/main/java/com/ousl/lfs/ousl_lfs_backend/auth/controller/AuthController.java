@@ -92,7 +92,10 @@ public class AuthController {
         }
         String token = authHeader.substring(7);
         logoutService.logout(token);
-        return ResponseEntity.ok(Map.of(MSG, "Logged out successfully."));
+        return ResponseEntity.ok(Map.of(
+                MSG, "Logged out successfully.",
+                "redirect", "/login"
+        ));
     }
 
 }
