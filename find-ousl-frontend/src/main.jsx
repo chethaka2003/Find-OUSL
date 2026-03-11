@@ -7,6 +7,7 @@ import './index.css'
  * Main Entry Point
  * Renders the React app into the DOM
  * Developer: PrabashVijayanga
+ *          : Chethaka Himsara
  * Project: OUSL Lost & Found System
  */
 
