@@ -20,7 +20,6 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
-@RequiredArgsConstructor
 public class AuthController {
 
     private static final String MSG = "message";
@@ -30,6 +29,14 @@ public class AuthController {
     private final PasswordResetService passwordResetService;
     private final SimpleRateLimiter rateLimiter;
     private final LogoutService logoutService;
+
+    public AuthController(RegistrationService registrationService, AuthService authService, PasswordResetService passwordResetService, SimpleRateLimiter rateLimiter, LogoutService logoutService) {
+        this.registrationService = registrationService;
+        this.authService = authService;
+        this.passwordResetService = passwordResetService;
+        this.rateLimiter = rateLimiter;
+        this.logoutService = logoutService;
+    }
 
 
     // ---------- FR1 ----------

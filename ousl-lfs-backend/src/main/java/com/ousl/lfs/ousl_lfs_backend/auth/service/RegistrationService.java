@@ -1,6 +1,5 @@
 package com.ousl.lfs.ousl_lfs_backend.auth.service;
 
-
 import com.ousl.lfs.ousl_lfs_backend.auth.dto.RegisterRequest;
 import com.ousl.lfs.ousl_lfs_backend.common.util.PasswordPolicy;
 import com.ousl.lfs.ousl_lfs_backend.common.util.UniversityDomainChecker;
